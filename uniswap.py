@@ -2,27 +2,27 @@ from math import floor, ceil  # for quantization
 from pprint import pprint
 
 
-class Uniswap:  # between Eth and Gas
+class Uniswap:  # between Eth and Token
     def __init__(self,
                  address,
-                 amount_Gwei,   # ex) (1.) * n
-                 amount_GAS,    # ex) (200. ~= 199.5) * n
-                 init_LT=1000000,
-                 fee=0.003      # 0.3%
+                 amount_Eth,
+                 amount_ERC20,
+                 init_LT,
+                 fee=0.003  # 0.3%
                  ):
 
-        self.Gwei, self.GAS, self.LT = amount_Gwei, amount_GAS, init_LT
-        self.k = self.Gwei * self.GAS  # constant product
+        self.Eth, self.ERC20, self.LT = amount_Eth, amount_ERC20, init_LT
+        self.k = self.Eth * self.ERC20  # constant product
         self.fee = fee
 
         self.LT_holders = {}
         self.LT_holders[address] = init_LT
 
-    def _update(self, Gwei_prime, GAS_prime, LT_prime=None):
+    def _update(self, Eth_prime, ERC20_prime, LT_prime=None):
         if LT_prime is not None:
             self.LT = LT_prime
-        self.Gwei, self.GAS = Gwei_prime, GAS_prime
-        self.k = self.Gwei * self.GAS
+        self.Eth, self.ERC20 = Eth_prime, ERC20_prime
+        self.k = self.Eth * self.ERC20
 
     """Swap Protocol"""
 
@@ -55,58 +55,58 @@ class Uniswap:  # between Eth and Gas
         delta_X = floor(beta / ((1. - beta) * gamma) * X) + 1
         return delta_X
 
-    def Gwei_to_GAS(self, delta_Gwei, bool_fee=True, bool_update=True):
-        Gwei_prime = self.Gwei + delta_Gwei
-        delta_GAS = self._get_input_price(delta_Gwei, self.Gwei, self.GAS, bool_fee=bool_fee)
-        GAS_prime = self.GAS - delta_GAS
+    def Eth_to_ERC20(self, delta_Eth, bool_fee=True, bool_update=True):
+        Eth_prime = self.Eth + delta_Eth
+        delta_ERC20 = self._get_input_price(delta_Eth, self.Eth, self.ERC20, bool_fee=bool_fee)
+        ERC20_prime = self.ERC20 - delta_ERC20
 
         if bool_update:
-            self._update(Gwei_prime, GAS_prime)  # Pool update
-        return delta_GAS
+            self._update(Eth_prime, ERC20_prime)
+        return delta_ERC20
 
-    def Gwei_to_GAS_exact(self, delta_GAS, bool_fee=True, bool_update=True):
-        delta_Gwei = self._get_output_price(delta_GAS, self.GAS, self.Gwei, bool_fee=bool_fee)
-        Gwei_prime = self.Gwei + delta_Gwei
-        GAS_prime = self.GAS - delta_GAS
-
-        if bool_update:
-            self._update(Gwei_prime, GAS_prime)  # Pool update
-        return delta_Gwei
-
-    def GAS_to_Gwei(self, delta_GAS, bool_fee=True, bool_update=True):
-        GAS_prime = self.GAS + delta_GAS
-        delta_Gwei = self._get_input_price(delta_GAS, self.GAS, self.Gwei, bool_fee=bool_fee)
-        Gwei_prime = self.Gwei - delta_Gwei
+    def Eth_to_ERC20_exact(self, delta_ERC20, bool_fee=True, bool_update=True):
+        delta_Eth = self._get_output_price(delta_ERC20, self.ERC20, self.Eth, bool_fee=bool_fee)
+        Eth_prime = self.Eth + delta_Eth
+        ERC20_prime = self.ERC20 - delta_ERC20
 
         if bool_update:
-            self._update(Gwei_prime, GAS_prime)  # Pool update
-        return delta_Gwei
+            self._update(Eth_prime, ERC20_prime)
+        return delta_Eth
 
-    def GAS_to_Gwei_exact(self, delta_Gwei, bool_fee=True, bool_update=True):
-        delta_GAS = self._get_output_price(delta_Gwei, self.Gwei, self.GAS, bool_fee=bool_fee)
-        GAS_prime = self.GAS + delta_GAS
-        Gwei_prime = self.Gwei - delta_Gwei
+    def ERC20_to_Eth(self, delta_ERC20, bool_fee=True, bool_update=True):
+        ERC20_prime = self.ERC20 + delta_ERC20
+        delta_Eth = self._get_input_price(delta_ERC20, self.ERC20, self.Eth, bool_fee=bool_fee)
+        Eth_prime = self.Eth - delta_Eth
 
         if bool_update:
-            self._update(Gwei_prime, GAS_prime)  # Pool update
-        return delta_GAS
+            self._update(Eth_prime, ERC20_prime)
+        return delta_Eth
+
+    def ERC20_to_Eth_exact(self, delta_Eth, bool_fee=True, bool_update=True):
+        delta_ERC20 = self._get_output_price(delta_Eth, self.Eth, self.ERC20, bool_fee=bool_fee)
+        ERC20_prime = self.ERC20 + delta_ERC20
+        Eth_prime = self.Eth - delta_Eth
+
+        if bool_update:
+            self._update(Eth_prime, ERC20_prime)
+        return delta_ERC20
 
     """Liquidity Protocol"""
 
-    def required_GAS_for_liquidity(self, delta_Gwei):
-        alpha = float(delta_Gwei / self.Gwei)
+    def required_ERC20_for_liquidity(self, delta_Eth):
+        alpha = float(delta_Eth / self.Eth)
 
-        GAS_prime = floor((1. + alpha) * self.GAS) + 1
-        return GAS_prime - self.GAS
+        ERC20_prime = floor((1. + alpha) * self.ERC20) + 1
+        return ERC20_prime - self.ERC20
 
-    def join(self, address, delta_Gwei, delta_GAS):
-        # delta_GAS validity check
-        current_required_GAS_for_liquidity = self.required_GAS_for_liquidity(delta_Gwei)
-        if current_required_GAS_for_liquidity != delta_GAS:
-            raise Exception("invalid delta_GAS. Require {} GAS but input is {}".format(
-                current_required_GAS_for_liquidity, delta_GAS))
+    def join(self, address, delta_Eth, delta_ERC20):
+        # delta_ERC20 validity check
+        current_required_ERC20_for_liquidity = self.required_ERC20_for_liquidity(delta_Eth)
+        if current_required_ERC20_for_liquidity != delta_ERC20:
+            raise Exception("invalid delta_ERC20. Require {} ERC20 but input is {}".format(
+                current_required_ERC20_for_liquidity, delta_ERC20))
 
-        delta_LT = self._mint(delta_Gwei, delta_GAS)
+        delta_LT = self._mint(delta_Eth, delta_ERC20)
         if address in self.LT_holders.keys():
             self.LT_holders[address] += delta_LT
         else:
@@ -124,42 +124,42 @@ class Uniswap:  # between Eth and Gas
             raise Exception("invalid delta_LT. Have to be under {} LT but input is {}".format(
                 self.LT_holders[address], delta_LT))
 
-        delta_Gwei, delta_GAS = self._burn(delta_LT)
+        delta_Eth, delta_ERC20 = self._burn(delta_LT)
         self.LT_holders[address] -= delta_LT
         if self.LT_holders[address] == 0:
             del self.LT_holders[address]
 
-        return delta_Gwei, delta_GAS
+        return delta_Eth, delta_ERC20
 
-    def _mint(self, delta_Gwei, delta_GAS):  # add_liquidity
-        alpha = float(delta_Gwei / self.Gwei)
+    def _mint(self, delta_Eth, delta_ERC20):  # add_liquidity
+        alpha = float(delta_Eth / self.Eth)
 
-        Gwei_prime = self.Gwei + delta_Gwei
-        GAS_prime = floor((1. + alpha) * self.GAS) + 1
+        Eth_prime = self.Eth + delta_Eth
+        ERC20_prime = floor((1. + alpha) * self.ERC20) + 1
         LT_prime = floor((1. + alpha) * self.LT)
         delta_LT = LT_prime - self.LT
 
-        self._update(Gwei_prime, GAS_prime, LT_prime)  # Pool update
+        self._update(Eth_prime, ERC20_prime, LT_prime)
         return delta_LT
 
     def _burn(self, delta_LT):  # remove_liquidity
         alpha = float(delta_LT / self.LT)
 
-        Gwei_prime = ceil((1. - alpha) * self.Gwei)
-        GAS_prime = ceil((1. - alpha) * self.GAS)
+        Eth_prime = ceil((1. - alpha) * self.Eth)
+        ERC20_prime = ceil((1. - alpha) * self.ERC20)
         LT_prime = self.LT - delta_LT
-        delta_Gwei = self.Gwei - Gwei_prime
-        delta_GAS = self.GAS - GAS_prime
+        delta_Eth = self.Eth - Eth_prime
+        delta_ERC20 = self.ERC20 - ERC20_prime
 
-        self._update(Gwei_prime, GAS_prime, LT_prime)  # burn LT
-        return delta_Gwei, delta_GAS
+        self._update(Eth_prime, ERC20_prime, LT_prime)
+        return delta_Eth, delta_ERC20
 
     """Logging"""
 
     def print_pool_state(self, bool_LT=False):
-        print("Gwei\t\tGAS\t\tk\t\tLT")
+        print("Eth\t\tERC20\t\tk\t\tLT")
         print("{}\t\t{}\t{}\t{}".format(
-            self.Gwei, self.GAS, self.k, self.LT))
+            self.Eth, self.ERC20, self.k, self.LT))
         if bool_LT:
             pprint(self.LT_holders)
         print('\n')
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     import random
 
     """init"""
-    us = Uniswap('-1', 100000, 20000000)  # 1:200
+    us = Uniswap('-1', 100000, 20000000, 100000)
     us.print_pool_state(bool_LT=True)
 
     """Providing Liquidity"""
@@ -179,11 +179,11 @@ if __name__ == "__main__":
     """Txs"""
     for _ in range(1000000):
         if random.random() < 0.5:
-            us.Gwei_to_GAS(2)
+            us.Eth_to_ERC20(2)
         else:
-            us.GAS_to_Gwei_exact(2)
+            us.ERC20_to_Eth_exact(2)
     us.print_pool_state(bool_LT=False)
 
     """Removing Liquidity"""
-    print(us.out('0', 20000))  # The LT holder takes extra fees
+    print(us.out('0', 2000))  # The LT holder takes extra fees
     us.print_pool_state(bool_LT=True)
